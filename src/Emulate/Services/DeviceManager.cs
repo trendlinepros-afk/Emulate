@@ -68,6 +68,17 @@ public sealed class RunningDevice : INotifyPropertyChanged
 public static class DeviceManager
 {
     public static ObservableCollection<RunningDevice> Devices { get; } = new();
+
+    static DeviceManager()
+    {
+        // A device that goes away takes its web access server with it.
+        Devices.CollectionChanged += (_, e) =>
+        {
+            if (e.OldItems == null) return;
+            foreach (RunningDevice d in e.OldItems)
+                if (Find(d.Profile) == null) _ = WebAccess.StopAsync(d.Profile);
+        };
+    }
     private static FileSystemWatcher? _sharedWatcher;
     private static CancellationTokenSource? _sharedDebounce;
 
@@ -290,6 +301,11 @@ public static class DeviceManager
 
         _ = LocationLoopAsync(dev);
         _ = LivenessLoopAsync(dev);
+        if (p.WebAccessEnabled && !WebAccess.IsRunning(p))
+        {
+            try { await WebAccess.StartAsync(dev); }
+            catch (Exception ex) { Log.Error("Web access start", ex); Log.Say($"Web access for {p.Name} couldn't start: {ex.Message}"); }
+        }
         if (p.SyncSharedFolder) _ = SyncSharedFolderAsync(dev);
         EnsureSharedWatcher();
     }

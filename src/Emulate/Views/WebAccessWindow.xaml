@@ -1,0 +1,60 @@
+<Window x:Class="Emulate.Views.WebAccessWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Web access" Width="600" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" Style="{StaticResource DarkWindow}"
+        Icon="pack://application:,,,/Assets/emulate.ico">
+    <StackPanel Margin="24">
+        <TextBlock x:Name="HeaderText" Style="{StaticResource H1}" Text="Web access" Margin="0,0,0,4"/>
+        <TextBlock Style="{StaticResource MutedText}" Margin="0,0,0,16"
+                   Text="View and control this device from a web browser on another phone, tablet or computer on the same Wi-Fi or network."/>
+
+        <Border Style="{StaticResource Panel}">
+            <StackPanel>
+                <CheckBox x:Name="EnabledBox" Content="Turn on web access for this device" Click="Enabled_Click" FontWeight="SemiBold"/>
+                <TextBlock x:Name="StateText" Style="{StaticResource MutedText}" FontSize="12" Margin="28,2,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <Border x:Name="LivePanel" Style="{StaticResource Panel}" Margin="0,12,0,0" Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Background="White" CornerRadius="10" Padding="8" VerticalAlignment="Top" Margin="0,0,18,0">
+                    <Image x:Name="QrImage" Width="150" Height="150" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                </Border>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="SCAN OR OPEN" Style="{StaticResource Label}"/>
+                    <TextBox x:Name="UrlBox" IsReadOnly="True" Margin="0,6,0,8" FontFamily="Cascadia Mono, Consolas" FontSize="12"/>
+                    <WrapPanel>
+                        <Button Content="Copy link" Click="Copy_Click" Margin="0,0,6,6"/>
+                        <Button Content="Open here" Click="Open_Click" Margin="0,0,6,6"/>
+                    </WrapPanel>
+                    <TextBlock Text="ACCESS CODE" Style="{StaticResource Label}" Margin="0,10,0,4"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="CodeText" FontSize="22" FontWeight="SemiBold" FontFamily="Cascadia Mono, Consolas" VerticalAlignment="Center"/>
+                        <Button Content="New code" Click="NewCode_Click" Margin="14,0,0,0" Padding="10,4"/>
+                    </StackPanel>
+                    <TextBlock x:Name="OtherUrls" Style="{StaticResource MutedText}" FontSize="11" Margin="0,10,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Style="{StaticResource Panel}" Margin="0,12,0,0">
+            <StackPanel>
+                <TextBlock Text="If the other device can't connect" FontWeight="SemiBold"/>
+                <TextBlock Style="{StaticResource MutedText}" FontSize="12" Margin="0,4,0,10"
+                           Text="Make sure both are on the same network. If Windows asked about the firewall, choose Allow (private networks). You can also add the rule here. Anyone with the link and code can control this device, so only share it with people you trust."/>
+                <WrapPanel>
+                    <Button Content="Allow through Windows Firewall" Click="Firewall_Click" Margin="0,0,10,0"/>
+                    <TextBlock Text="Port" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="6,0,8,0"/>
+                    <TextBox x:Name="PortBox" Width="80" VerticalAlignment="Center"/>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
+        <Button Content="Done" Style="{StaticResource Primary}" HorizontalAlignment="Right" Margin="0,18,0,0" Click="Done_Click" IsDefault="True"/>
+    </StackPanel>
+</Window>

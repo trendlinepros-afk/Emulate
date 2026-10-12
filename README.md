@@ -49,6 +49,20 @@ Press **Launch** on a profile and choose:
 You can switch a running device between the two with the pop-out button in its toolbar. Emulate remembers your
 choice per profile, and double-clicking a profile launches it the way you used last time.
 
+## Web access (use a device from another phone, tablet or PC)
+
+Open a running device's toolbar and click the globe (or use **⋯ → Web access…** on a profile) and turn it on. You get
+a link and a QR code. Open it in a browser on any device on the same network to see the live screen and control it:
+tap, swipe, scroll, type, and use Back, Home, Recent apps, volume, rotate and power.
+
+- Every device has its own port and a 6-digit access code. Anyone with the link and code can control it, so only
+  share it with people you trust. **New code** shuts out old links.
+- It turns on automatically whenever that device runs, until you switch it off.
+- Live video needs a browser that supports WebCodecs H.264 (Chrome, Edge, Safari 16.4+, recent Firefox). Other
+  browsers get "basic mode", which updates the screen a few times a second.
+- If another device can't connect, click **Allow through Windows Firewall** in the Web access window.
+- To reach it from outside your home network, use a VPN such as Tailscale and open the PC's VPN address.
+
 ## Profiles
 
 A profile is one device: its own apps, accounts, photos and settings. You can have as many as you want per OS,
@@ -57,7 +71,11 @@ for example a "Work WhatsApp" and a "Personal" phone. For each one you choose:
 - camera (your PC webcam, a simulated camera, or none)
 - location (live from Windows, approximate from your IP, a fixed spot, or off)
 
-Use the **⋯** menu on a profile to duplicate it, factory-reset it, or delete it.
+Use the **⋯** menu on a profile to:
+- **Copy profile (apps & data)**: an exact, independent clone with the same apps, accounts, photos and settings.
+  Stop the device first. The copy's first start is a normal (full) boot.
+- **New profile with same settings**: same hardware settings, fresh device.
+- **Factory reset** or **Delete**.
 
 ## Files between your PC and the device
 

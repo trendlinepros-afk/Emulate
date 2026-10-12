@@ -25,8 +25,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Kestrel web server for "Web access" (view/control a device from a browser on another device). -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="Assets\emulate.ico" />
     <Resource Include="Assets\emulate.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
 </Project>

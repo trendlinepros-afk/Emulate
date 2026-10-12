@@ -1,12 +1,11 @@
 name: Build & Release
 
-# Every push to main (or the development branch) builds the Windows app and publishes a GitHub release.
+# Every push to main builds the Windows app and publishes a GitHub release.
 # The in-app "Check for updates" button reads the latest release, so pushing a change = shipping an update.
 on:
   push:
     branches:
       - main
-      - claude/android-emulator-windows-iron97
     paths-ignore:
       - '**.md'
       - 'docs/**'

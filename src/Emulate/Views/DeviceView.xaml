@@ -64,6 +64,9 @@
                     <Button Style="{StaticResource Ghost}" ToolTip="Location" Click="Location_Click" IsEnabled="{Binding IsRunning}">
                         <TextBlock Text="&#xE81D;" Style="{StaticResource Icon}"/>
                     </Button>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Web access: use this device from a browser on another device" Click="Web_Click">
+                        <TextBlock Text="&#xE774;" Style="{StaticResource Icon}"/>
+                    </Button>
                     <Border Width="1" Height="18" Background="{StaticResource Line}" Margin="8,0"/>
                     <Button x:Name="DockButton" Style="{StaticResource Ghost}" Click="Dock_Click">
                         <TextBlock x:Name="DockIcon" Text="&#xE8A7;" Style="{StaticResource Icon}"/>

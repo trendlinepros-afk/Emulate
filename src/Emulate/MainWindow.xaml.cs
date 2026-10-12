@@ -284,6 +284,9 @@ public partial class MainWindow : Window
             RefreshOsList();
             RefreshProfiles();
         }));
+        menu.Items.Add(MenuItemFor("Copy profile (apps & data)…", "\uE8C8", "An exact copy: same apps, accounts, photos and settings", () => _ = CopyProfileAsync(p)));
+        menu.Items.Add(MenuItemFor("Web access…", "\uE774", "Use this device from a browser on another device", () =>
+            new WebAccessWindow(p) { Owner = this }.ShowDialog()));
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor("Factory reset…", "", "Erase apps and data", () =>
         {
@@ -308,8 +311,37 @@ public partial class MainWindow : Window
         menu.IsOpen = true;
     }
 
+    private async Task CopyProfileAsync(Profile p)
+    {
+        if (DeviceManager.Find(p) != null)
+        {
+            MessageBox.Show(this, $"Stop '{p.Name}' first, then copy it. (Copying a running device could give a broken copy.)", "Copy profile");
+            return;
+        }
+        var name = PromptWindow.Ask(this, "Copy profile", $"An exact copy of '{p.Name}', with all its apps, accounts and files. Name for the copy:", p.Name + " copy");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var progress = new Progress<DownloadProgress>(d => Log.Say(d.ToString()));
+        try
+        {
+            var copy = await ProfileCloner.CloneAsync(p, name.Trim(), progress);
+            RefreshOsList();
+            RefreshProfiles();
+            Log.Say($"'{copy.Name}' is ready: an exact copy of '{p.Name}'.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Copy profile", ex);
+            MessageBox.Show(this, "Couldn't copy the profile: " + ex.Message, "Copy profile", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private async Task LaunchAsync(Profile p, bool docked)
     {
+        if (ProfileCloner.IsBusy(p))
+        {
+            MessageBox.Show(this, "This profile is being copied. Try again when the copy is finished.", "Emulate");
+            return;
+        }
         if (!AppSettings.Current.AcceptedSdkLicense)
         {
             var license = new LicenseWindow { Owner = this };

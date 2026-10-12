@@ -28,6 +28,10 @@ public sealed class Profile
     public bool SyncSharedFolder { get; set; } = true;
     /// <summary>Remembered launch mode: true = inside the Emulate window, false = its own window.</summary>
     public bool LaunchDocked { get; set; } = true;
+    /// <summary>Serve this device's screen to web browsers on the local network while it runs.</summary>
+    public bool WebAccessEnabled { get; set; }
+    public int WebPort { get; set; }
+    public string? WebCode { get; set; }
     public bool PresetApplied { get; set; }
     public string? BridgeVersion { get; set; }
     public DateTime Created { get; set; } = DateTime.Now;

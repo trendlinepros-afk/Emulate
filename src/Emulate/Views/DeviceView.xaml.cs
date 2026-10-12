@@ -139,6 +139,13 @@ public partial class DeviceView : UserControl
         Log.Say(await DeviceManager.InstallApkAsync(Device, dlg.FileName));
     }
 
+    private void Web_Click(object sender, RoutedEventArgs e)
+    {
+        Host.Visibility = Visibility.Collapsed;
+        try { new WebAccessWindow(Device.Profile) { Owner = Window.GetWindow(this) }.ShowDialog(); }
+        finally { Refresh(); }
+    }
+
     private async void Location_Click(object sender, RoutedEventArgs e)
     {
         // Dialogs can't sit above the native emulator window, so hide it while the dialog is open.
