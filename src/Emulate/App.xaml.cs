@@ -56,6 +56,7 @@ public partial class App : Application
     {
         Current.Dispatcher.Invoke(() =>
         {
+            (Current.MainWindow as MainWindow)?.ReleaseEmbeddedWindows();
             try { _singleInstance?.ReleaseMutex(); } catch { }
             _singleInstance = null;
             Current.Shutdown();

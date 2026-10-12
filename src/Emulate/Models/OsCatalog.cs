@@ -43,21 +43,21 @@ public static class OsCatalog
             "Newest Android, big flagship screen",
             "The latest Android release with Google Play, on a large 1440p flagship-class display " +
             "like a current Galaxy S Ultra. Best for trying the newest apps and features.",
-            OsPreset.Standard, "flagship", 4096, "#4F8CFF"),
+            OsPreset.Standard, "flagship", 4096, "#8B9CFF"),
 
         new OsDefinition(
             "android15-mainstream", "Android 15 Everyday", "Android 15", 35, "Mainstream",
             "Popular, polished, great app support",
             "Android 15 with Google Play on a standard 6.2\" phone. The everyday choice: what most " +
             "current phones run, with excellent app compatibility.",
-            OsPreset.Standard, "standard", 4096, "#34C38F"),
+            OsPreset.Standard, "standard", 4096, "#6FCFA5"),
 
         new OsDefinition(
             "android14-stable", "Android 14 Stable", "Android 14", 34, "Mainstream",
             "Rock-solid, maximum compatibility",
             "Android 14 with Google Play. A mature, well-tested release for apps that are picky " +
             "about newer Android versions (banking, older games, work apps).",
-            OsPreset.Standard, "standard", 3072, "#F2A93B"),
+            OsPreset.Standard, "standard", 3072, "#E3BE7A"),
 
         new OsDefinition(
             "android15-hardened", "Android 15 Hardened", "Android 15", 35, "Secure",
@@ -65,7 +65,7 @@ public static class OsCatalog
             "Android 15 with Google Play plus a privacy/security preset: encrypted Private DNS " +
             "(Quad9), background Wi-Fi/Bluetooth scanning off, Play Protect forced on, lock-screen " +
             "notification content hidden and Google extras (YouTube, Maps, Drive, Meet, etc.) removed.",
-            OsPreset.Hardened, "standard", 4096, "#E05260"),
+            OsPreset.Hardened, "standard", 4096, "#EE8B95"),
 
         new OsDefinition(
             "android13-lite", "Android 13 Lite", "Android 13", 33, "Secure",
@@ -73,7 +73,7 @@ public static class OsCatalog
             "Android 13 with Google Play, debloated down to the essentials (Play Store, Chrome, " +
             "Phone, Messages, Camera, Files), faster animations and a small memory footprint. " +
             "Great for running several devices at once.",
-            OsPreset.Lite, "compact", 2048, "#9B6CFF"),
+            OsPreset.Lite, "compact", 2048, "#B39DFF"),
     };
 
     public static OsDefinition? Find(string id) => All.FirstOrDefault(o => o.Id == id);

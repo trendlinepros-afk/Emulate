@@ -1,0 +1,112 @@
+<UserControl x:Class="Emulate.Views.DeviceView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:Emulate.Views">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar -->
+        <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="16,8">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="30" Height="30" CornerRadius="15" Background="{StaticResource Selected}" Margin="0,0,10,0">
+                        <TextBlock Text="{Binding Initial}" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="6" Height="6" Fill="{Binding Accent}" Margin="0,1,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding OsName}" Foreground="{StaticResource Muted}" FontSize="12"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Android navigation -->
+                    <Button Style="{StaticResource Ghost}" ToolTip="Back" Click="Back_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE72B;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Home" Click="Home_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE80F;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Recent apps" Click="Recents_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE8A9;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Border Width="1" Height="18" Background="{StaticResource Line}" Margin="8,0"/>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Rotate" Click="Rotate_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE7AD;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Volume down" Click="VolDown_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE993;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Volume up" Click="VolUp_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE995;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Power / lock screen" Click="Power_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE7E8;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Border Width="1" Height="18" Background="{StaticResource Line}" Margin="8,0"/>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Send files from this PC (photos go to the gallery)" Click="SendFiles_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE898;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Copy the device's photos and downloads to this PC" Click="Pull_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE896;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Screenshot" Click="Screenshot_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE722;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Install an app (.apk) from this PC" Click="Apk_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE7B8;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" ToolTip="Location" Click="Location_Click" IsEnabled="{Binding IsRunning}">
+                        <TextBlock Text="&#xE81D;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Border Width="1" Height="18" Background="{StaticResource Line}" Margin="8,0"/>
+                    <Button x:Name="DockButton" Style="{StaticResource Ghost}" Click="Dock_Click">
+                        <TextBlock x:Name="DockIcon" Text="&#xE8A7;" Style="{StaticResource Icon}"/>
+                    </Button>
+                    <Button Style="{StaticResource DangerGhost}" ToolTip="Shut down (the device's state is saved)" Click="Stop_Click" Margin="4,0,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE7E8;" Style="{StaticResource Icon}" Margin="0,0,6,0"/>
+                            <TextBlock Text="Stop"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Screen area -->
+        <Grid Grid.Row="1" x:Name="ScreenArea" Background="{StaticResource Bg}">
+            <v:EmulatorHost x:Name="Host" Visibility="Collapsed"/>
+
+            <!-- Starting / downloading / booting -->
+            <StackPanel x:Name="ProgressPanel" VerticalAlignment="Center" HorizontalAlignment="Center" Width="380">
+                <TextBlock x:Name="ProgressTitle" Text="Starting" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                <TextBlock Text="{Binding Detail}" Style="{StaticResource MutedText}" TextAlignment="Center" Margin="0,6,0,16"/>
+                <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100" IsIndeterminate="{Binding ProgressIndeterminate, Mode=OneWay}"/>
+            </StackPanel>
+
+            <!-- Failed -->
+            <StackPanel x:Name="FailedPanel" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="460" Visibility="Collapsed">
+                <TextBlock Text="&#xE783;" Style="{StaticResource Icon}" FontSize="28" Foreground="{StaticResource Danger}" Margin="0,0,0,12"/>
+                <TextBlock Text="This device couldn't start" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                <TextBlock Text="{Binding Detail}" Style="{StaticResource MutedText}" TextAlignment="Center" Margin="0,8,0,16"/>
+                <Button Content="Close" HorizontalAlignment="Center" Click="Stop_Click" Margin="0"/>
+            </StackPanel>
+
+            <!-- Running in its own window -->
+            <StackPanel x:Name="UndockedPanel" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed">
+                <TextBlock Text="&#xE8A7;" Style="{StaticResource Icon}" FontSize="28" Foreground="{StaticResource Muted}" Margin="0,0,0,12"/>
+                <TextBlock Text="Running in its own window" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                <TextBlock Text="The toolbar above still controls it." Style="{StaticResource MutedText}" HorizontalAlignment="Center" Margin="0,6,0,16"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button Content="Bring to front" Click="Front_Click"/>
+                    <Button Content="Show it here" Style="{StaticResource Primary}" Click="Dock_Click" Margin="0"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

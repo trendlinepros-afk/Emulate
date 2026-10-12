@@ -19,6 +19,7 @@ public partial class ProfileWindow : Window
     public ProfileWindow(Profile? existing, OsDefinition os, bool locationOnly = false)
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => Native.ApplyDarkTitleBar(this);
         _isNew = existing == null;
         Profile = existing ?? new Profile
         {

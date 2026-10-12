@@ -25,6 +25,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\Emulate.exe
+SetupIconFile=..\src\Emulate\Assets\emulate.ico
 CloseApplications=yes
 
 [Tasks]

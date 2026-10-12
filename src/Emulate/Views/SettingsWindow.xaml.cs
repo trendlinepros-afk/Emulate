@@ -13,6 +13,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow(MainWindow main)
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => Native.ApplyDarkTitleBar(this);
         _main = main;
         CurrentVersionText.Text = $"Installed: v{UpdateService.CurrentVersion}";
         AutoCheck.IsChecked = AppSettings.Current.CheckForUpdatesOnStartup;

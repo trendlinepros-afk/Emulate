@@ -1,11 +1,17 @@
 using System.Diagnostics;
 using System.Windows;
 
+using Emulate.Services;
+
 namespace Emulate.Views;
 
 public partial class LicenseWindow : Window
 {
-    public LicenseWindow() => InitializeComponent();
+    public LicenseWindow()
+    {
+        InitializeComponent();
+        SourceInitialized += (_, _) => Native.ApplyDarkTitleBar(this);
+    }
 
     private void Terms_Click(object sender, RoutedEventArgs e) =>
         Process.Start(new ProcessStartInfo("https://developer.android.com/studio/terms") { UseShellExecute = true });

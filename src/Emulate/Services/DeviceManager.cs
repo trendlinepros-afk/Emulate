@@ -45,6 +45,16 @@ public sealed class RunningDevice : INotifyPropertyChanged
     private string _location = "";
     public string LocationText { get => _location; set { _location = value; OnChanged(); } }
 
+    private bool _docked = true;
+    /// <summary>True when the device screen is shown inside the Emulate window.</summary>
+    public bool Docked { get => _docked; set { _docked = value; OnChanged(); } }
+
+    private IntPtr _window;
+    /// <summary>The emulator's native window, once it has appeared.</summary>
+    public IntPtr EmulatorWindow { get => _window; set { _window = value; OnChanged(); } }
+
+    public string Initial => string.IsNullOrEmpty(Profile.Name) ? "?" : Profile.Name[..1].ToUpperInvariant();
+
     public bool IsRunning => _state == DeviceState.Running;
     public bool IsBusy => ShowProgress;
     public string StateText => string.IsNullOrEmpty(_detail) ? _state.ToString() : $"{_state}: {_detail}";
@@ -63,7 +73,7 @@ public static class DeviceManager
 
     public static RunningDevice? Find(Profile p) => Devices.FirstOrDefault(d => d.Profile.Id == p.Id);
 
-    public static async Task LaunchAsync(Profile profile)
+    public static async Task LaunchAsync(Profile profile, bool docked)
     {
         var existing = Find(profile);
         if (existing != null && existing.State is not (DeviceState.Stopped or DeviceState.Failed))
@@ -73,7 +83,12 @@ public static class DeviceManager
         }
         if (existing != null) Devices.Remove(existing);
 
-        var dev = new RunningDevice(profile);
+        var dev = new RunningDevice(profile) { Docked = docked };
+        if (profile.LaunchDocked != docked)
+        {
+            profile.LaunchDocked = docked;
+            ProfileStore.Save();
+        }
         Devices.Add(dev);
         try
         {
@@ -163,6 +178,12 @@ public static class DeviceManager
                 dev.Process = FindEmulatorProcess(p.AvdName);
                 return;
             }
+            if (dev.State == DeviceState.Running && code == 0)
+            {
+                // Some emulator builds hand off to a child process; if adb still sees the device, keep tracking it.
+                dev.Process = FindEmulatorProcess(p.AvdName);
+                if (dev.Process != null) return;
+            }
             if (dev.State is DeviceState.Stopping or DeviceState.Running or DeviceState.Stopped)
             {
                 dev.State = DeviceState.Stopped;
@@ -184,6 +205,7 @@ public static class DeviceManager
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
         dev.Process = proc;
+        _ = FindWindowAsync(dev);
 
         dev.State = DeviceState.Booting;
         dev.Detail = "Booting Android (first boot can take a few minutes)";
@@ -507,6 +529,35 @@ public static class DeviceManager
         return name;
     }
 
+    // ---------- Window + navigation ----------
+
+    /// <summary>Waits for the emulator's window ("Android Emulator - avd:port") to appear.</summary>
+    private static async Task FindWindowAsync(RunningDevice dev)
+    {
+        var prefix = $"Android Emulator - {dev.Profile.AvdName}:";
+        var deadline = DateTime.UtcNow.AddMinutes(5);
+        while (DateTime.UtcNow < deadline && !dev.Cts.IsCancellationRequested)
+        {
+            foreach (var w in Native.TopLevelWindows(visibleOnly: false))
+            {
+                var title = Native.GetTitle(w);
+                if (title.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && Native.IsWindowVisible(w))
+                {
+                    dev.EmulatorWindow = w;
+                    return;
+                }
+            }
+            try { await Task.Delay(250, dev.Cts.Token); } catch (OperationCanceledException) { return; }
+        }
+    }
+
+    public const int KeyBack = 4, KeyHome = 3, KeyRecents = 187, KeyPower = 26, KeyVolumeUp = 24, KeyVolumeDown = 25;
+
+    public static Task SendKeyAsync(RunningDevice dev, int keyCode) =>
+        Adb.ShellAsync(dev.Serial, $"input keyevent {keyCode}", TimeSpan.FromSeconds(10));
+
+    public static Task RotateAsync(RunningDevice dev) => Adb.EmuAsync(dev.Serial, "rotate");
+
     // ---------- Stop / re-attach ----------
 
     public static async Task StopAsync(RunningDevice dev)
@@ -540,7 +591,7 @@ public static class DeviceManager
     {
         try
         {
-            var handle = dev.Process?.MainWindowHandle ?? IntPtr.Zero;
+            var handle = dev.EmulatorWindow != IntPtr.Zero ? dev.EmulatorWindow : dev.Process?.MainWindowHandle ?? IntPtr.Zero;
             if (handle != IntPtr.Zero) Native.ShowWindow(handle, 9 /* SW_RESTORE */);
             if (handle != IntPtr.Zero) Native.SetForegroundWindow(handle);
         }
@@ -561,7 +612,7 @@ public static class DeviceManager
                 var avd = await Adb.GetAvdNameAsync(serial);
                 var profile = ProfileStore.All.FirstOrDefault(p => p.AvdName == avd);
                 if (profile == null || Find(profile) != null) continue;
-                var dev = new RunningDevice(profile) { Port = int.Parse(serial["emulator-".Length..]) };
+                var dev = new RunningDevice(profile) { Port = int.Parse(serial["emulator-".Length..]), Docked = profile.LaunchDocked };
                 dev.Process = FindEmulatorProcess(profile.AvdName);
                 if (dev.Process != null)
                 {
@@ -574,6 +625,7 @@ public static class DeviceManager
                     };
                 }
                 Devices.Add(dev);
+                _ = FindWindowAsync(dev);
                 Log.Info($"Re-attached to running device {profile.Name} ({serial})");
                 await AfterBootAsync(dev);
             }
@@ -600,13 +652,4 @@ public static class DeviceManager
         }
         return null;
     }
-}
-
-internal static class Native
-{
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 }

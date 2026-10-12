@@ -17,10 +17,16 @@
     <!-- CI overrides this with -p:Version=1.0.<run number>. The updater compares it to the latest GitHub release. -->
     <Version>1.0.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\emulate.ico</ApplicationIcon>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <SelfContained Condition="'$(SelfContained)' == ''">false</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\emulate.ico" />
+    <Resource Include="Assets\emulate.png" />
+  </ItemGroup>
 
 </Project>

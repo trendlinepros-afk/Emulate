@@ -26,6 +26,8 @@ public sealed class Profile
     public double ManualLatitude { get; set; } = 40.7580;
     public double ManualLongitude { get; set; } = -73.9855;
     public bool SyncSharedFolder { get; set; } = true;
+    /// <summary>Remembered launch mode: true = inside the Emulate window, false = its own window.</summary>
+    public bool LaunchDocked { get; set; } = true;
     public bool PresetApplied { get; set; }
     public string? BridgeVersion { get; set; }
     public DateTime Created { get; set; } = DateTime.Now;

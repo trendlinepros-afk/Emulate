@@ -39,6 +39,16 @@ All of them are official Google Play images, so the Play Store and Google sign-i
 The look is stock Android (Pixel-style). Samsung's One UI can't be emulated, but the Flagship screen matches a
 current Galaxy S Ultra.
 
+## Launching
+
+Press **Launch** on a profile and choose:
+- **Launch in window**: the device's screen opens in a tab inside Emulate, with a toolbar for Back, Home,
+  Recent apps, rotate, volume, power, send files, get photos, screenshot, install APK and location.
+- **Launch in new window**: the device opens in its own window, like the standard Android Emulator.
+
+You can switch a running device between the two with the pop-out button in its toolbar. Emulate remembers your
+choice per profile, and double-clicking a profile launches it the way you used last time.
+
 ## Profiles
 
 A profile is one device: its own apps, accounts, photos and settings. You can have as many as you want per OS,
