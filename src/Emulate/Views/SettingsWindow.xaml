@@ -1,0 +1,70 @@
+<Window x:Class="Emulate.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings" Width="640" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" Style="{StaticResource DarkWindow}">
+    <StackPanel Margin="22">
+        <TextBlock Style="{StaticResource H1}" Text="Settings"/>
+
+        <!-- Updates -->
+        <Border Background="{StaticResource Card}" CornerRadius="10" Padding="16" Margin="0,0,0,12">
+            <StackPanel>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" x:Name="CurrentVersionText" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                    <TextBlock Text="Updates" FontWeight="SemiBold" FontSize="14"/>
+                </DockPanel>
+                <TextBlock Style="{StaticResource MutedText}" FontSize="12" Margin="0,4,0,10"
+                           Text="Emulate updates itself from its GitHub releases. Updating downloads the new version, restarts the app and keeps all your profiles. Running devices keep running."/>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="CheckButton" Style="{StaticResource Primary}" Click="Check_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE895;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Check for updates"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="UpdateButton" Style="{StaticResource Primary}" Click="Update_Click" Visibility="Collapsed" Background="{StaticResource Good}">
+                        <TextBlock x:Name="UpdateButtonText" Text="Update &amp; restart"/>
+                    </Button>
+                    <Button Content="Restart app" Click="Restart_Click"/>
+                    <Button Content="Release notes" Click="Releases_Click" Margin="0"/>
+                </StackPanel>
+                <TextBlock x:Name="UpdateStatus" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                <ProgressBar x:Name="UpdateProgress" Margin="0,8,0,0" Maximum="1" Visibility="Collapsed"/>
+                <CheckBox x:Name="AutoCheck" Content="Check for updates when Emulate starts" Margin="0,10,0,0" Click="AutoCheck_Click"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Emulator engine -->
+        <Border Background="{StaticResource Card}" CornerRadius="10" Padding="16" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Emulator engine" FontWeight="SemiBold" FontSize="14"/>
+                <TextBlock Style="{StaticResource MutedText}" FontSize="12" Margin="0,4,0,10"
+                           Text="Emulate uses Google's official Android Emulator and Google Play system images, downloaded on first use. Android needs Windows virtualization (Windows Hypervisor Platform) to run fast."/>
+                <WrapPanel>
+                    <Button Content="Check virtualization" Click="Accel_Click" Margin="0,0,6,6"/>
+                    <Button Content="Fix virtualization (admin)" Click="FixAccel_Click" Margin="0,0,6,6"/>
+                    <Button Content="Re-download emulator" Click="Redownload_Click" Margin="0,0,6,6"/>
+                    <Button Content="Open data folder" Click="Data_Click" Margin="0,0,6,6"/>
+                    <Button Content="Open logs" Click="Logs_Click" Margin="0,0,0,6"/>
+                </WrapPanel>
+                <TextBlock x:Name="AccelStatus" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12"/>
+                <TextBlock x:Name="PathsText" Style="{StaticResource MutedText}" FontSize="11" Margin="0,6,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Files -->
+        <Border Background="{StaticResource Card}" CornerRadius="10" Padding="16">
+            <StackPanel>
+                <TextBlock Text="Files between PC and devices" FontWeight="SemiBold" FontSize="14"/>
+                <TextBlock Style="{StaticResource MutedText}" FontSize="12" Margin="0,4,0,10" x:Name="FilesHelp"/>
+                <WrapPanel>
+                    <Button Content="Open shared folder" Click="Shared_Click" Margin="0,0,6,6"/>
+                    <Button Content="Change shared folder..." Click="ChangeShared_Click" Margin="0,0,6,6"/>
+                    <Button Content="Open files received from devices" Click="Received_Click" Margin="0,0,0,6"/>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
+        <Button Content="Close" IsCancel="True" HorizontalAlignment="Right" Margin="0,16,0,0" Click="Close_Click"/>
+    </StackPanel>
+</Window>

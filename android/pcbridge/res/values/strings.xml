@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PC Bridge</string>
+    <string name="pick_label">Pick from PC</string>
+    <string name="save_label">Save to PC</string>
+    <string name="root_title">Windows PC</string>
+</resources>

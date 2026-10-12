@@ -1,0 +1,22 @@
+<Window x:Class="Emulate.Views.LicenseWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="First-time setup" Width="560" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" Style="{StaticResource DarkWindow}">
+    <StackPanel Margin="22">
+        <TextBlock Style="{StaticResource H1}" Text="First-time setup"/>
+        <TextBlock Style="{StaticResource MutedText}" Margin="0,0,0,10">
+            Emulate will now download Google's Android Emulator, platform tools and the Google Play system image for the OS you
+            picked (about 1.5-2 GB in total, only once per OS). These components are provided by Google under the Android
+            Software Development Kit License Agreement.
+        </TextBlock>
+        <TextBlock Margin="0,0,0,14">
+            <Hyperlink Click="Terms_Click" Foreground="{StaticResource Accent}">Read the Android SDK License Agreement</Hyperlink>
+        </TextBlock>
+        <CheckBox x:Name="AcceptBox" Content="I accept the Android SDK License Agreement" Click="AcceptBox_Click"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Cancel" IsCancel="True"/>
+            <Button x:Name="ContinueButton" Content="Download and continue" Style="{StaticResource Primary}" IsEnabled="False" Click="Continue_Click" Margin="0"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

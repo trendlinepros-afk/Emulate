@@ -1,0 +1,7 @@
+bin/
+obj/
+publish/
+out/
+android/pcbridge/build/
+*.user
+.vs/
