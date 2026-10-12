@@ -60,6 +60,10 @@ tap, swipe, scroll, type, and use Back, Home, Recent apps, volume, rotate and po
 - It turns on automatically whenever that device runs, until you switch it off.
 - Live video needs a browser that supports WebCodecs H.264 (Chrome, Edge, Safari 16.4+, recent Firefox). Other
   browsers get "basic mode", which updates the screen a few times a second.
+- **Fit to screen** (the corners button, on by default on phones and tablets) reshapes the Android display to
+  your browser's shape so it fills the page. The device returns to its normal shape when the last browser
+  disconnects.
+- Press and hold works like a real finger: long-press menus open while you hold, and you can drag (e.g. move app icons).
 - If another device can't connect, click **Allow through Windows Firewall** in the Web access window.
 - To reach it from outside your home network, use a VPN such as Tailscale and open the PC's VPN address.
 

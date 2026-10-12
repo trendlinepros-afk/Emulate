@@ -40,7 +40,8 @@ internal static class WebPage
     public static string Viewer(string name) => Head + $$"""
         <title>{{WebUtility.HtmlEncode(name)}} · Emulate</title>
         <style>
-        body{display:flex;flex-direction:column;height:100dvh}
+        body{display:flex;flex-direction:column;height:100dvh;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+        body.fit #wrap{padding:0} body.fit canvas{border-radius:0;box-shadow:none}
         header{display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));border-bottom:1px solid var(--line);background:var(--surface)}
         header .name{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)} .dot.on{background:var(--good)}
@@ -51,6 +52,7 @@ internal static class WebPage
         nav{display:flex;justify-content:center;gap:2px;padding:8px;padding-bottom:max(8px,env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface)}
         nav button{flex:1 1 0;min-width:0;max-width:48px;height:40px;outline:none;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
         nav button:hover,nav button:active{background:var(--card);color:var(--text)}
+        nav button.on{color:var(--text)}
         nav .sep{width:1px;background:var(--line);margin:8px 6px}
         svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
         #kb{position:fixed;left:-1000px;top:0;opacity:0;width:10px;height:10px}
@@ -67,6 +69,7 @@ internal static class WebPage
           <button data-key="24" title="Volume up"><svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 12h4M18 10v4"/></svg></button>
           <button id="rotBtn" title="Rotate"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
           <button data-key="26" title="Power"><svg viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/></svg></button>
+          <button id="fitBtn" title="Fit the device to this screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
         </nav>
         <input id="kb" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <script>
@@ -173,7 +176,7 @@ internal static class WebPage
           resetDecoder();
           const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?video=' + (useVideo ? 1 : 0) + '&code=' + encodeURIComponent(code);
           ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
-          ws.onopen = () => { retry = 0; setStatus(useVideo ? 'Live' : 'Live (basic mode)', true); };
+          ws.onopen = () => { retry = 0; lastFit = 0; setStatus(useVideo ? 'Live' : 'Live (basic mode)', true); sendFit(); };
           ws.onmessage = e => { if (typeof e.data !== 'string' && useVideo) feed(new Uint8Array(e.data)); };
           ws.onclose = () => { setStatus('Reconnecting…', false); reconnect(); };
           ws.onerror = () => {};
@@ -187,24 +190,74 @@ internal static class WebPage
         function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 
         // ---- Touch / mouse ----
-        let down = null;
+        // Quick tap -> tap. Quick drag -> swipe (smooth scrolling/flinging).
+        // Hold still for a moment -> a real finger-down is sent, so long-press menus open while you hold
+        // and you can then drag (e.g. move app icons); lifting sends finger-up.
+        const HOLD_MS = 350, SLOP = 10;
+        let g = null;
         function norm(e) {
           const r = canvas.getBoundingClientRect();
           return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
         }
-        canvas.addEventListener('pointerdown', e => { e.preventDefault(); canvas.setPointerCapture(e.pointerId); down = { ...norm(e), t: performance.now(), px: e.clientX, py: e.clientY }; });
-        canvas.addEventListener('pointerup', e => {
-          if (!down) return; e.preventDefault();
-          const p = norm(e), dt = performance.now() - down.t, dist = Math.hypot(e.clientX - down.px, e.clientY - down.py);
-          if (dist < 10) {
-            if (dt > 450) send({ t: 'swipe', x1: down.x, y1: down.y, x2: down.x, y2: down.y, ms: Math.round(dt) }); // long press
-            else send({ t: 'tap', x: p.x, y: p.y });
-          } else {
-            send({ t: 'swipe', x1: down.x, y1: down.y, x2: p.x, y2: p.y, ms: Math.round(Math.min(2000, Math.max(80, dt))) });
-          }
-          down = null;
+        canvas.addEventListener('pointerdown', e => {
+          e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+          const p = norm(e);
+          g = { x: p.x, y: p.y, lx: p.x, ly: p.y, px: e.clientX, py: e.clientY, t: performance.now(), mode: 'pending', lastMove: 0 };
+          const mine = g;
+          g.timer = setTimeout(() => {
+            if (g !== mine || g.mode !== 'pending') return;
+            g.mode = 'hold'; send({ t: 'down', x: g.x, y: g.y });
+            if (navigator.vibrate) navigator.vibrate(10);
+          }, HOLD_MS);
         });
-        canvas.addEventListener('pointercancel', () => down = null);
+        canvas.addEventListener('pointermove', e => {
+          if (!g) return;
+          const p = norm(e); g.lx = p.x; g.ly = p.y;
+          if (g.mode === 'pending' && Math.hypot(e.clientX - g.px, e.clientY - g.py) > SLOP) { g.mode = 'swipe'; clearTimeout(g.timer); }
+          if (g.mode === 'hold') {
+            const now = performance.now();
+            if (now - g.lastMove > 50) { g.lastMove = now; send({ t: 'move', x: p.x, y: p.y }); }
+          }
+        });
+        canvas.addEventListener('pointerup', e => {
+          if (!g) return; e.preventDefault(); clearTimeout(g.timer);
+          const p = norm(e), dt = performance.now() - g.t;
+          if (g.mode === 'pending') send({ t: 'tap', x: p.x, y: p.y });
+          else if (g.mode === 'swipe') send({ t: 'swipe', x1: g.x, y1: g.y, x2: p.x, y2: p.y, ms: Math.round(Math.min(2000, Math.max(80, dt))) });
+          else { send({ t: 'move', x: p.x, y: p.y }); send({ t: 'up', x: p.x, y: p.y }); }
+          g = null;
+        });
+        canvas.addEventListener('pointercancel', () => {
+          if (g) { clearTimeout(g.timer); if (g.mode === 'hold') send({ t: 'up', x: g.lx, y: g.ly }); }
+          g = null;
+        });
+        // Stop the browser's own long-press behaviour (iOS copy/select menu, magnifier, double-tap zoom).
+        canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+        canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+        document.addEventListener('selectstart', e => e.preventDefault());
+        document.addEventListener('gesturestart', e => e.preventDefault());
+
+        // ---- Fit to screen: reshape the Android display to this browser's viewing area ----
+        const wrap = document.getElementById('wrap'), fitBtn = document.getElementById('fitBtn');
+        let fit = (() => { try { const v = localStorage.getItem('emulate_fit'); if (v !== null) return v === '1'; } catch (e) {} return matchMedia('(pointer: coarse)').matches; })();
+        let lastFit = 0, fitTimer = 0;
+        function applyFitUi() { document.body.classList.toggle('fit', fit); fitBtn.classList.toggle('on', fit); }
+        function sendFit() {
+          if (!fit) return;
+          const w = wrap.clientWidth, h = wrap.clientHeight;
+          if (w < 50 || h < 50) return;
+          const ratio = h / w;
+          if (lastFit && Math.abs(ratio - lastFit) / lastFit < 0.03) return; // ignore tiny changes (browser bars sliding)
+          lastFit = ratio;
+          send({ t: 'fit', w: Math.round(w), h: Math.round(h) });
+        }
+        window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(sendFit, 400); });
+        fitBtn.addEventListener('click', () => {
+          fit = !fit; try { localStorage.setItem('emulate_fit', fit ? '1' : '0'); } catch (e) {}
+          applyFitUi(); lastFit = 0;
+          if (fit) setTimeout(sendFit, 50); else send({ t: 'fit', off: true });
+        });
+        applyFitUi();
         canvas.addEventListener('contextmenu', e => e.preventDefault());
         canvas.addEventListener('wheel', e => {
           e.preventDefault(); const p = norm(e), d = Math.max(-0.3, Math.min(0.3, -e.deltaY / 1500));

@@ -285,6 +285,8 @@ public static class DeviceManager
         dev.Detail = "Setting up";
         try
         {
+            // Undo a browser "fit to screen" size that may be left over from before a restart.
+            await Adb.ShellAsync(dev.Serial, "wm size reset");
             if (!p.PresetApplied) await Presets.ApplyAsync(dev.Serial, p);
             await InstallBridgeAsync(dev);
             await SendBridgeConfigAsync(dev);

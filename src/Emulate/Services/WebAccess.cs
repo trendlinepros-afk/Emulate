@@ -281,6 +281,20 @@ internal sealed class WebAccessServer : IAsyncDisposable
             case "rotate":
                 await DeviceManager.RotateAsync(_dev);
                 break;
+            // Press-and-hold / drag: a real finger down, moves, and up (long-press menus, dragging icons).
+            case "down":
+                _input.Send($"input motionevent DOWN {X("x")} {Y("y")}");
+                break;
+            case "move":
+                _input.Send($"input motionevent MOVE {X("x")} {Y("y")}", move: true);
+                break;
+            case "up":
+                _input.Send($"input motionevent UP {X("x")} {Y("y")}");
+                break;
+            case "fit":
+                if (m.TryGetProperty("off", out _)) await _streamer.UnfitAsync();
+                else await _streamer.FitAsync(m.GetProperty("w").GetInt32(), m.GetProperty("h").GetInt32());
+                break;
         }
     }
 
@@ -365,7 +379,47 @@ internal sealed class ScreenStreamer : IDisposable
             _clients.Remove(c);
             none = _clients.Count == 0;
         }
-        if (none) StopLoop();
+        if (none)
+        {
+            StopLoop();
+            _ = UnfitAsync(); // nobody watching: give the device its normal screen back
+        }
+    }
+
+    private bool _fitted;
+    private string? _fitSize;
+
+    /// <summary>Reshapes the Android display to the browser's viewing area so it fills the page.</summary>
+    public async Task FitAsync(int areaW, int areaH)
+    {
+        if (areaW < 100 || areaH < 100) return;
+        var r = await Adb.ShellAsync(_dev.Serial, "wm size", TimeSpan.FromSeconds(10));
+        var m = Regex.Match(r.Output, @"Physical size:\s*(\d+)x(\d+)");
+        if (!m.Success) return;
+        int pw = int.Parse(m.Groups[1].Value), ph = int.Parse(m.Groups[2].Value);
+        // Keep the device's width (so text size stays the same) and change its height to the browser's shape.
+        var natW = Math.Min(pw, ph);
+        double ratio = Math.Clamp((double)areaH / areaW, 0.5, 2.6);
+        int w = natW / 2 * 2, h = (int)Math.Round(natW * ratio / 2) * 2;
+        var size = $"{w}x{h}";
+        if (_fitted && _fitSize == size) return;
+        await Adb.ShellAsync(_dev.Serial, $"wm size {size}", TimeSpan.FromSeconds(10));
+        _fitted = true;
+        _fitSize = size;
+        _physical = null;
+        Restart();
+    }
+
+    public async Task UnfitAsync()
+    {
+        if (!_fitted) return;
+        _fitted = false;
+        _fitSize = null;
+        await Adb.ShellAsync(_dev.Serial, "wm size reset", TimeSpan.FromSeconds(10));
+        _physical = null;
+        bool any;
+        lock (_clients) any = _clients.Count > 0;
+        if (any) Restart();
     }
 
     private readonly object _loopGate = new();
@@ -490,37 +544,67 @@ internal sealed class ScreenStreamer : IDisposable
     {
         _disposed = true;
         StopLoop();
+        _ = UnfitAsync();
     }
 }
 
-/// <summary>A long-lived "adb shell" that input commands are written to (much faster than starting adb each time).</summary>
+/// <summary>
+/// A long-lived "adb shell" that input commands are fed to one at a time (much faster than starting adb each time).
+/// Commands run strictly in order; consecutive finger moves are merged so a drag never lags behind.
+/// </summary>
 internal sealed class InputShell : IDisposable
 {
+    private const string Marker = "__EMULATE_DONE__";
     private readonly RunningDevice _dev;
+    private readonly LinkedList<(string cmd, bool move)> _queue = new();
+    private readonly SemaphoreSlim _signal = new(0);
+    private readonly CancellationTokenSource _cts = new();
     private Process? _proc;
-    private readonly object _gate = new();
+    private TaskCompletionSource? _done;
 
-    public InputShell(RunningDevice dev) => _dev = dev;
-
-    public void Send(string command)
+    public InputShell(RunningDevice dev)
     {
-        lock (_gate)
+        _dev = dev;
+        _ = Task.Run(WorkerAsync);
+    }
+
+    /// <param name="move">Finger-move commands replace an unsent previous move instead of queueing behind it.</param>
+    public void Send(string command, bool move = false)
+    {
+        lock (_queue)
         {
+            if (move && _queue.Last is { Value.move: true } last) last.Value = (command, true);
+            else
+            {
+                _queue.AddLast((command, move));
+                _signal.Release();
+            }
+        }
+    }
+
+    private async Task WorkerAsync()
+    {
+        while (!_cts.IsCancellationRequested)
+        {
+            try { await _signal.WaitAsync(_cts.Token); } catch (OperationCanceledException) { return; }
+            string cmd;
+            lock (_queue)
+            {
+                if (_queue.First == null) continue;
+                cmd = _queue.First.Value.cmd;
+                _queue.RemoveFirst();
+            }
             try
             {
-                if (_proc == null || _proc.HasExited)
-                {
-                    var psi = ProcessRunner.CreateStartInfo(AppPaths.Adb, new[] { "-s", _dev.Serial, "shell" });
-                    psi.RedirectStandardInput = true;
-                    _proc = Process.Start(psi)!;
-                    _proc.OutputDataReceived += (_, _) => { };
-                    _proc.ErrorDataReceived += (_, _) => { };
-                    _proc.BeginOutputReadLine();
-                    _proc.BeginErrorReadLine();
-                }
-                // Commands run in order, so typed text never gets scrambled.
-                _proc.StandardInput.Write(command + "\n");
-                _proc.StandardInput.Flush();
+                EnsureShell();
+                var done = _done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                await _proc!.StandardInput.WriteAsync(cmd + "; echo " + Marker + "\n");
+                await _proc.StandardInput.FlushAsync();
+                await Task.WhenAny(done.Task, Task.Delay(5000, _cts.Token));
+            }
+            catch (OperationCanceledException)
+            {
+                return;
             }
             catch (Exception ex)
             {
@@ -531,12 +615,22 @@ internal sealed class InputShell : IDisposable
         }
     }
 
+    private void EnsureShell()
+    {
+        if (_proc is { HasExited: false }) return;
+        var psi = ProcessRunner.CreateStartInfo(AppPaths.Adb, new[] { "-s", _dev.Serial, "shell" });
+        psi.RedirectStandardInput = true;
+        _proc = Process.Start(psi)!;
+        _proc.OutputDataReceived += (_, e) => { if (e.Data?.Contains(Marker) == true) _done?.TrySetResult(); };
+        _proc.ErrorDataReceived += (_, _) => { };
+        _proc.BeginOutputReadLine();
+        _proc.BeginErrorReadLine();
+    }
+
     public void Dispose()
     {
-        lock (_gate)
-        {
-            try { _proc?.Kill(true); } catch { }
-            _proc = null;
-        }
+        _cts.Cancel();
+        try { _proc?.Kill(true); } catch { }
+        _proc = null;
     }
 }
