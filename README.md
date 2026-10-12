@@ -58,6 +58,9 @@ tap, swipe, scroll, type, and use Back, Home, Recent apps, volume, rotate and po
 - Every device has its own port and a 6-digit access code. Anyone with the link and code can control it, so only
   share it with people you trust. **New code** shuts out old links.
 - It turns on automatically whenever that device runs, until you switch it off.
+- Streaming and touch use the server part of [scrcpy](https://github.com/Genymobile/scrcpy) (Apache-2.0, bundled
+  in `third_party/scrcpy`). Video has low latency and your fingers are tracked live, including two-finger pinch.
+  If scrcpy can't start, Emulate falls back to Android's screen recorder and `adb input`, which is slower.
 - Live video needs a browser that supports WebCodecs H.264 (Chrome, Edge, Safari 16.4+, recent Firefox). Other
   browsers get "basic mode", which updates the screen a few times a second.
 - **Fit to screen** (the corners button, on by default on phones and tablets) reshapes the Android display to

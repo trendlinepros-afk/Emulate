@@ -257,6 +257,35 @@ internal sealed class WebAccessServer : IAsyncDisposable
         using var doc = JsonDocument.Parse(json);
         var m = doc.RootElement;
         var t = m.GetProperty("t").GetString();
+        var fast = _streamer.Fast;
+        // Fast path (scrcpy): coordinates are relative to the video frame, whose size the page reports.
+        int VX(string k) => (int)Math.Round(Math.Clamp(m.GetProperty(k).GetDouble(), 0, 1) * m.GetProperty("w").GetInt32());
+        int VY(string k) => (int)Math.Round(Math.Clamp(m.GetProperty(k).GetDouble(), 0, 1) * m.GetProperty("h").GetInt32());
+        switch (t)
+        {
+            case "touch" when fast != null:
+                fast.Touch((byte)m.GetProperty("a").GetInt32(), m.GetProperty("id").GetInt64(), VX("x"), VY("y"),
+                    m.GetProperty("w").GetInt32(), m.GetProperty("h").GetInt32());
+                return;
+            case "scroll" when fast != null:
+                fast.Scroll(VX("x"), VY("y"), m.GetProperty("w").GetInt32(), m.GetProperty("h").GetInt32(), 0, (float)m.GetProperty("v").GetDouble());
+                return;
+            case "key" when fast != null:
+                var fk = m.GetProperty("code").GetInt32();
+                if (fk is > 0 and < 400) fast.Key(fk);
+                return;
+            case "text" when fast != null:
+                var ft = m.GetProperty("s").GetString() ?? "";
+                if (ft.Length > 0) fast.Text(ft);
+                return;
+            case "rotate" when fast != null:
+                fast.Rotate();
+                return;
+            case "touch" or "scroll":
+                return; // fast path went away mid-gesture; the page falls back automatically
+        }
+
+        // Slow path ("adb shell input"): coordinates are relative to the current display size.
         var (w, h) = await _streamer.GetLogicalSizeAsync();
         int X(string k) => (int)Math.Round(Math.Clamp(m.GetProperty(k).GetDouble(), 0, 1) * (w - 1));
         int Y(string k) => (int)Math.Round(Math.Clamp(m.GetProperty(k).GetDouble(), 0, 1) * (h - 1));
@@ -350,7 +379,10 @@ internal sealed class StreamClient
     }
 }
 
-/// <summary>Runs "screenrecord --output-format=h264" on the device and fans the stream out to browsers.</summary>
+/// <summary>
+/// Streams the device screen to browsers. Prefers the scrcpy server (low latency, plus fast input injection);
+/// falls back to "screenrecord --output-format=h264" if scrcpy can't run.
+/// </summary>
 internal sealed class ScreenStreamer : IDisposable
 {
     private readonly RunningDevice _dev;
@@ -361,14 +393,49 @@ internal sealed class ScreenStreamer : IDisposable
     private int _rotation;
     private DateTime _rotationCheckedAt = DateTime.MinValue;
     private bool _disposed;
+    private ScrcpySession? _scrcpy;
+    private int _scrcpyFailures;
+    private bool _screenrecordActive;
 
     public ScreenStreamer(RunningDevice dev) => _dev = dev;
+
+    /// <summary>The live scrcpy session, when the fast path is running (touch/keys go through it).</summary>
+    public ScrcpySession? Fast => _scrcpy;
+
+    private static string FastMessage(bool on) => JsonSerializer.Serialize(new { type = "control", fast = on });
 
     public void Add(StreamClient c)
     {
         lock (_clients) _clients.Add(c);
-        // New viewers need a fresh keyframe: restart the recorder (or start it).
-        Restart();
+        if (_loopCts == null) { Restart(); return; }
+        if (_scrcpy is { } fast)
+        {
+            // Already streaming: tell the newcomer it can use fast input and ask for a fresh keyframe.
+            _ = c.SendTextAsync(FastMessage(true));
+            fast.ResetVideo();
+        }
+        else if (_screenrecordActive)
+        {
+            Restart(); // screenrecord can't produce a keyframe on demand
+        }
+        // Otherwise the stream is still starting and the newcomer gets it from the beginning.
+    }
+
+    private void Broadcast(byte[] chunk)
+    {
+        List<StreamClient>? slow = null;
+        lock (_clients)
+        {
+            foreach (var c in _clients)
+                if (!c.SendBinary(chunk)) (slow ??= new()).Add(c);
+            if (slow != null) foreach (var c in slow) _clients.Remove(c);
+        }
+        if (slow != null) foreach (var c in slow) c.Abort();
+    }
+
+    private void BroadcastText(string text)
+    {
+        lock (_clients) foreach (var c in _clients) _ = c.SendTextAsync(text);
     }
 
     public void Remove(StreamClient c)
@@ -407,7 +474,7 @@ internal sealed class ScreenStreamer : IDisposable
         _fitted = true;
         _fitSize = size;
         _physical = null;
-        Restart();
+        if (_scrcpy == null) Restart(); // scrcpy follows display size changes by itself
     }
 
     public async Task UnfitAsync()
@@ -419,7 +486,7 @@ internal sealed class ScreenStreamer : IDisposable
         _physical = null;
         bool any;
         lock (_clients) any = _clients.Count > 0;
-        if (any) Restart();
+        if (any && _scrcpy == null) Restart();
     }
 
     private readonly object _loopGate = new();
@@ -443,6 +510,12 @@ internal sealed class ScreenStreamer : IDisposable
             _loopCts = null;
             try { if (_proc is { HasExited: false }) _proc.Kill(true); } catch { }
             _proc = null;
+            _screenrecordActive = false;
+            if (_scrcpy is { } s)
+            {
+                _scrcpy = null;
+                _ = s.DisposeAsync();
+            }
         }
     }
 
@@ -486,8 +559,16 @@ internal sealed class ScreenStreamer : IDisposable
     {
         while (!ct.IsCancellationRequested)
         {
+            if (ScrcpySession.Available && _scrcpyFailures < 3)
+            {
+                await RunScrcpyAsync(ct);
+                if (ct.IsCancellationRequested) return;
+                try { await Task.Delay(300, ct); } catch (OperationCanceledException) { return; }
+                continue;
+            }
             try
             {
+                _screenrecordActive = true;
                 await RefreshRotationAsync();
                 var (w, h) = await GetLogicalSizeAsync();
                 // Encode at most 720 px wide (or tall in landscape), multiples of 16 for the encoder.
@@ -511,15 +592,7 @@ internal sealed class ScreenStreamer : IDisposable
                 {
                     var read = await stream.ReadAsync(buffer, ct);
                     if (read <= 0) break;
-                    var chunk = buffer[..read];
-                    List<StreamClient>? slow = null;
-                    lock (_clients)
-                    {
-                        foreach (var c in _clients)
-                            if (!c.SendBinary(chunk)) (slow ??= new()).Add(c);
-                        if (slow != null) foreach (var c in slow) _clients.Remove(c);
-                    }
-                    if (slow != null) foreach (var c in slow) c.Abort();
+                    Broadcast(buffer[..read]);
                     if ((DateTime.UtcNow - lastRotationCheck).TotalSeconds > 2)
                     {
                         lastRotationCheck = DateTime.UtcNow;
@@ -538,6 +611,50 @@ internal sealed class ScreenStreamer : IDisposable
             }
             try { await Task.Delay(300, ct); } catch (OperationCanceledException) { return; }
         }
+    }
+
+    private async Task RunScrcpyAsync(CancellationToken ct)
+    {
+        ScrcpySession? session = null;
+        var started = DateTime.UtcNow;
+        try
+        {
+            session = await ScrcpySession.StartAsync(_dev.Serial, 1280, ct);
+            lock (_loopGate)
+            {
+                if (ct.IsCancellationRequested) return;
+                _scrcpy = session;
+            }
+            BroadcastText(FastMessage(true));
+            var stream = session.VideoStream;
+            var buffer = new byte[256 * 1024];
+            while (!ct.IsCancellationRequested)
+            {
+                var read = await stream.ReadAsync(buffer, ct);
+                if (read <= 0) break;
+                Broadcast(buffer[..read]);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            Log.Info("scrcpy stream: " + ex.Message);
+        }
+        finally
+        {
+            lock (_loopGate) { if (_scrcpy == session) _scrcpy = null; }
+            if (session != null)
+            {
+                if (!ct.IsCancellationRequested) BroadcastText(FastMessage(false));
+                await session.DisposeAsync();
+            }
+        }
+        // A session that ran fine for a while and then ended isn't a failure (e.g. emulator hiccup).
+        _scrcpyFailures = (DateTime.UtcNow - started).TotalSeconds > 15 ? 0 : _scrcpyFailures + 1;
+        if (_scrcpyFailures >= 3) Log.Info("scrcpy failed repeatedly; using screenrecord for web access");
     }
 
     public void Dispose()

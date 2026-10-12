@@ -79,7 +79,7 @@ internal static class WebPage
         const code = new URLSearchParams(location.search).get('code') || '';
         let useVideo = 'VideoDecoder' in window && 'EncodedVideoChunk' in window, decodeErrors = 0;
         let ws = null, decoder = null, codecStr = '', sps = null, pps = null, waitingKey = true, ts = 0;
-        let buf = new Uint8Array(0), au = [], auKey = false, flushTimer = 0, shotTimer = 0, gotFrame = false;
+        let buf = new Uint8Array(0), au = [], auKey = false, flushTimer = 0, shotTimer = 0, gotFrame = false, fast = false, spsKey = '';
 
         function setStatus(text, on) { statusEl.textContent = text; dot.classList.toggle('on', !!on); }
         function hex(n) { return n.toString(16).padStart(2, '0'); }
@@ -93,11 +93,14 @@ internal static class WebPage
         // ---- H.264 (Annex B) -> WebCodecs ----
         function resetDecoder() {
           try { decoder && decoder.state !== 'closed' && decoder.close(); } catch (e) {}
-          decoder = null; codecStr = ''; sps = pps = null; waitingKey = true; buf = new Uint8Array(0); au = []; auKey = false;
+          decoder = null; codecStr = ''; spsKey = ''; sps = pps = null; waitingKey = true; buf = new Uint8Array(0); au = []; auKey = false;
         }
         function configure() {
           const c = 'avc1.' + hex(sps[1]) + hex(sps[2]) + hex(sps[3]);
-          if (decoder && decoder.state === 'configured' && c === codecStr) return;
+          // Reconfigure whenever the stream parameters change (rotation, fit-to-screen, new encoder session).
+          const key = Array.prototype.join.call(sps, ',');
+          if (decoder && decoder.state === 'configured' && c === codecStr && key === spsKey) return;
+          spsKey = key;
           try { decoder && decoder.state !== 'closed' && decoder.close(); } catch (e) {}
           decoder = new VideoDecoder({
             output: f => { draw(f, f.displayWidth, f.displayHeight); f.close(); },
@@ -157,7 +160,7 @@ internal static class WebPage
               const l = buf[2] === 1 ? 3 : 4; nal(buf.subarray(l)); buf = new Uint8Array(0);
             }
             flushAU();
-          }, 20);
+          }, 12);
         }
 
         // ---- Screenshot fallback (browsers without WebCodecs) ----
@@ -177,8 +180,12 @@ internal static class WebPage
           const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?video=' + (useVideo ? 1 : 0) + '&code=' + encodeURIComponent(code);
           ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
           ws.onopen = () => { retry = 0; lastFit = 0; setStatus(useVideo ? 'Live' : 'Live (basic mode)', true); sendFit(); };
-          ws.onmessage = e => { if (typeof e.data !== 'string' && useVideo) feed(new Uint8Array(e.data)); };
-          ws.onclose = () => { setStatus('Reconnecting…', false); reconnect(); };
+          ws.onmessage = e => {
+            if (typeof e.data === 'string') {
+              try { const o = JSON.parse(e.data); if (o.type === 'control') { fast = !!o.fast; setStatus(fast ? 'Live' : (useVideo ? 'Live' : 'Live (basic mode)'), true); } } catch (x) {}
+            } else if (useVideo) feed(new Uint8Array(e.data));
+          };
+          ws.onclose = () => { fast = false; live.clear(); setStatus('Reconnecting…', false); reconnect(); };
           ws.onerror = () => {};
         }
         let reconnectTimer = 0;
@@ -199,6 +206,34 @@ internal static class WebPage
           const r = canvas.getBoundingClientRect();
           return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
         }
+        // Fast path (scrcpy): every finger is streamed live, like touching the real screen (multi-touch too).
+        const live = new Map();
+        function canLive() { return fast && useVideo && gotFrame; }
+        function sendTouch(a, e) {
+          const p = norm(e);
+          send({ t: 'touch', a, id: e.pointerId, x: p.x, y: p.y, w: canvas.width, h: canvas.height });
+        }
+        canvas.addEventListener('pointerdown', e => {
+          if (!canLive()) return;
+          e.preventDefault(); e.stopImmediatePropagation(); canvas.setPointerCapture(e.pointerId);
+          live.set(e.pointerId, 0); sendTouch(0, e);
+        });
+        canvas.addEventListener('pointermove', e => {
+          if (!live.has(e.pointerId)) return;
+          e.stopImmediatePropagation();
+          const now = performance.now();
+          if (now - live.get(e.pointerId) < 8) return;
+          live.set(e.pointerId, now); sendTouch(2, e);
+        });
+        const liveUp = e => {
+          if (!live.has(e.pointerId)) return;
+          e.preventDefault(); e.stopImmediatePropagation();
+          live.delete(e.pointerId); sendTouch(1, e);
+        };
+        canvas.addEventListener('pointerup', liveUp);
+        canvas.addEventListener('pointercancel', liveUp);
+
+        // Basic path ("adb input"): taps, swipes and press-and-hold are recognised here.
         canvas.addEventListener('pointerdown', e => {
           e.preventDefault(); canvas.setPointerCapture(e.pointerId);
           const p = norm(e);
@@ -260,7 +295,13 @@ internal static class WebPage
         applyFitUi();
         canvas.addEventListener('contextmenu', e => e.preventDefault());
         canvas.addEventListener('wheel', e => {
-          e.preventDefault(); const p = norm(e), d = Math.max(-0.3, Math.min(0.3, -e.deltaY / 1500));
+          e.preventDefault();
+          if (canLive()) {
+            const p = norm(e), v = Math.max(-16, Math.min(16, -e.deltaY / (e.deltaMode === 1 ? 3 : 100)));
+            send({ t: 'scroll', x: p.x, y: p.y, w: canvas.width, h: canvas.height, v });
+            return;
+          }
+          const p = norm(e), d = Math.max(-0.3, Math.min(0.3, -e.deltaY / 1500));
           send({ t: 'swipe', x1: p.x, y1: p.y, x2: p.x, y2: Math.min(1, Math.max(0, p.y + d)), ms: 120 });
         }, { passive: false });
 
