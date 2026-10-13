@@ -368,7 +368,7 @@ public static class DeviceManager
     public static Task SendBridgeConfigAsync(RunningDevice dev) =>
         Adb.ShellAsync(dev.Serial,
             "am broadcast -n com.emulate.pcbridge/.ConfigReceiver -a com.emulate.pcbridge.CONFIG " +
-            $"--es token {AppSettings.Current.BridgeToken} --ei port {BridgeServer.Port}");
+            $"--es token {AppSettings.Current.BridgeToken} --ei port {BridgeServer.Port} --es dev {dev.Profile.Id}");
 
     // ---------- Location ----------
 
@@ -429,16 +429,15 @@ public static class DeviceManager
 
     // ---------- Files ----------
 
-    private const string DevicePcFolder = "/sdcard/Pictures/From PC";
     private const string DeviceDownloadFolder = "/sdcard/Download";
 
     /// <summary>Copies PC files onto the device. Photos/videos land in the gallery, everything else in Downloads.</summary>
-    public static async Task<int> SendFilesAsync(RunningDevice dev, IEnumerable<string> files)
+    public static async Task<int> SendFilesAsync(RunningDevice dev, IEnumerable<string> files, string mediaFolder = "From PC")
     {
         var count = 0;
         foreach (var f in files)
         {
-            var folder = Mime.IsMedia(f) ? DevicePcFolder : DeviceDownloadFolder;
+            var folder = Mime.IsMedia(f) ? "/sdcard/Pictures/" + mediaFolder : DeviceDownloadFolder;
             await Adb.ShellAsync(dev.Serial, $"mkdir -p {Adb.ShQuote(folder)}");
             var remote = $"{folder}/{Path.GetFileName(f)}";
             var r = await Adb.RunAsync(TimeSpan.FromMinutes(10), "-s", dev.Serial, "push", f, remote);

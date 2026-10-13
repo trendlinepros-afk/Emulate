@@ -56,6 +56,12 @@ internal static class WebPage
         nav .sep{width:1px;background:var(--line);margin:8px 6px}
         svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
         #kb{position:fixed;left:-1000px;top:0;opacity:0;width:10px;height:10px}
+        #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px;display:none;max-width:88vw;box-shadow:0 8px 30px #0008;z-index:20}
+        #sheet{position:fixed;inset:0;background:#0009;display:none;align-items:flex-end;justify-content:center;z-index:30}
+        #sheet .box{width:100%;max-width:440px;background:var(--surface);border:1px solid var(--line);border-radius:18px 18px 0 0;padding:20px;padding-bottom:max(20px,env(safe-area-inset-bottom))}
+        #sheet h2{font-size:17px;margin:0 0 4px} #sheet p{color:var(--muted);margin:0 0 16px}
+        .big{width:100%;padding:13px;border-radius:12px;font-weight:600;margin-top:8px}
+        .big.primary{background:var(--text);color:var(--bg)} .big.plain{background:var(--card);color:var(--text)}
         </style></head><body>
         <header><span class="dot" id="dot"></span><span class="name">{{WebUtility.HtmlEncode(name)}}</span><span id="status">Connecting…</span></header>
         <div id="wrap"><canvas id="screen" width="360" height="780"></canvas><div id="msg">Connecting to the device…</div></div>
@@ -68,10 +74,20 @@ internal static class WebPage
           <button data-key="25" title="Volume down"><svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 12h4"/></svg></button>
           <button data-key="24" title="Volume up"><svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 12h4M18 10v4"/></svg></button>
           <button id="rotBtn" title="Rotate"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+          <button id="upBtn" title="Add photos from this phone to the device's gallery"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-9 8"/></svg></button>
           <button data-key="26" title="Power"><svg viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/></svg></button>
           <button id="fitBtn" title="Fit the device to this screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
         </nav>
         <input id="kb" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <input id="upInput" type="file" accept="image/*,video/*" multiple hidden>
+        <input id="pickInput" type="file" hidden>
+        <div id="toast"></div>
+        <div id="sheet"><div class="box">
+          <h2 id="sheetTitle">The device wants a file</h2>
+          <p id="sheetText">An app on the device asked you to choose something. Pick it from this phone.</p>
+          <button class="big primary" id="sheetGo">Choose from this phone</button>
+          <button class="big plain" id="sheetCancel">Cancel</button>
+        </div></div>
         <script>
         (() => {
         const canvas = document.getElementById('screen'), ctx = canvas.getContext('2d');
@@ -182,7 +198,11 @@ internal static class WebPage
           ws.onopen = () => { retry = 0; lastFit = 0; setStatus(useVideo ? 'Live' : 'Live (basic mode)', true); sendFit(); };
           ws.onmessage = e => {
             if (typeof e.data === 'string') {
-              try { const o = JSON.parse(e.data); if (o.type === 'control') { fast = !!o.fast; setStatus(fast ? 'Live' : (useVideo ? 'Live' : 'Live (basic mode)'), true); } } catch (x) {}
+              let o = null; try { o = JSON.parse(e.data); } catch (x) {}
+              if (!o) return;
+              if (o.type === 'control') { fast = !!o.fast; setStatus(fast ? 'Live' : (useVideo ? 'Live' : 'Live (basic mode)'), true); }
+              else if (o.type === 'pick') showPick(o);
+              else if (o.type === 'pickclose' && pickReq === o.req) hidePick();
             } else if (useVideo) feed(new Uint8Array(e.data));
           };
           ws.onclose = () => { fast = false; live.clear(); setStatus('Reconnecting…', false); reconnect(); };
@@ -326,6 +346,51 @@ internal static class WebPage
           else if (e.inputType === 'insertLineBreak') { flushText(); send({ t: 'key', code: 66 }); }
           else if (e.inputType === 'deleteContentBackward') { flushText(); send({ t: 'key', code: 67 }); }
           e.preventDefault();
+        });
+
+        // ---- Photos & files from this phone ----
+        const toastEl = document.getElementById('toast'); let toastTimer = 0;
+        function toast(t, ms) { toastEl.textContent = t; toastEl.style.display = 'block'; clearTimeout(toastTimer); if (ms) toastTimer = setTimeout(() => toastEl.style.display = 'none', ms); }
+        async function upload(url, file) {
+          const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'name=' + encodeURIComponent(file.name || 'photo.jpg') + '&code=' + encodeURIComponent(code),
+            { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' } });
+          if (!r.ok) throw new Error('upload failed (' + r.status + ')');
+        }
+        // "Add photos": camera roll / take photo / files -> the device's gallery (Pictures > From phone).
+        const upInput = document.getElementById('upInput');
+        document.getElementById('upBtn').addEventListener('click', () => { upInput.value = ''; upInput.click(); });
+        upInput.addEventListener('change', async () => {
+          const files = [...upInput.files]; if (!files.length) return;
+          try {
+            for (let i = 0; i < files.length; i++) { toast('Adding ' + (i + 1) + ' of ' + files.length + '…'); await upload('/add-to-device', files[i]); }
+            toast(files.length === 1 ? 'Added to the device\'s gallery (Pictures › From phone)' : files.length + ' items added to the device\'s gallery', 3500);
+          } catch (e) { toast('Couldn\'t add: ' + e.message, 4000); }
+        });
+        // An app on the device asked for a file: answer from this phone.
+        const sheet = document.getElementById('sheet'), pickInput = document.getElementById('pickInput');
+        let pickReq = null;
+        function showPick(o) {
+          pickReq = o.req;
+          const m = (o.mime || '*/*').toLowerCase();
+          const photos = m.includes('image') || m.includes('video');
+          document.getElementById('sheetTitle').textContent = photos ? 'The device wants a photo' : 'The device wants a file';
+          document.getElementById('sheetText').textContent = 'An app on the device asked you to choose ' + (photos ? 'a photo or video' : 'a file') + '. Pick it from this phone, or take a new one.';
+          pickInput.accept = m === '*/*' ? '' : m;
+          pickInput.multiple = !!o.multi;
+          sheet.style.display = 'flex';
+        }
+        function hidePick() { sheet.style.display = 'none'; pickReq = null; }
+        document.getElementById('sheetGo').addEventListener('click', () => { pickInput.value = ''; pickInput.click(); });
+        document.getElementById('sheetCancel').addEventListener('click', () => { if (pickReq) send({ t: 'pickcancel', req: pickReq }); hidePick(); });
+        pickInput.addEventListener('change', async () => {
+          const req = pickReq, files = [...pickInput.files];
+          if (!req || !files.length) return;
+          sheet.style.display = 'none';
+          try {
+            for (let i = 0; i < files.length; i++) { toast('Sending ' + (i + 1) + ' of ' + files.length + ' to the app…'); await upload('/pick-upload?req=' + req, files[i]); }
+            send({ t: 'pickdone', req }); toast('Sent to the app', 2500);
+          } catch (e) { send({ t: 'pickcancel', req }); toast('Couldn\'t send: ' + e.message, 4000); }
+          pickReq = null;
         });
 
         (async () => {

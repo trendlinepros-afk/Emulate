@@ -37,7 +37,9 @@
                     </Grid>
 
                     <TextBlock Text="Camera" Margin="0,0,0,4"/>
-                    <ListBox x:Name="CameraList" Style="{StaticResource ChipList}" Margin="0,0,0,10"/>
+                    <ListBox x:Name="CameraList" Style="{StaticResource ChipList}" Margin="0,0,0,2"/>
+                    <TextBlock Style="{StaticResource MutedText}" FontSize="12" Margin="0,0,0,12"
+                               Text="Want to use your phone's camera? Install a free phone-as-webcam app (such as Camo, Iriun or DroidCam) on this PC and your phone, then pick it here. It's used by every app's camera, including WhatsApp."/>
 
                     <CheckBox x:Name="SyncBox" Content="Show my PC's 'Emulate Shared' folder in this device's gallery" Margin="0,0,0,14"/>
                 </StackPanel>

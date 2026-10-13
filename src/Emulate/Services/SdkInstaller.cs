@@ -226,6 +226,25 @@ public static class SdkInstaller
         return Convert.ToHexString(await SHA1.HashDataAsync(s, ct)).ToLowerInvariant();
     }
 
+    /// <summary>The PC's cameras as the emulator sees them: ("webcam0", "Integrated Camera"), ...</summary>
+    public static async Task<List<(string id, string name)>> ListWebcamsAsync()
+    {
+        var list = new List<(string, string)>();
+        if (!File.Exists(AppPaths.Emulator)) return list;
+        try
+        {
+            var r = await ProcessRunner.RunAsync(AppPaths.Emulator, new[] { "-webcam-list" }, TimeSpan.FromSeconds(20));
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(r.Combined,
+                         @"Camera '(webcam\d+)' is connected to device '([^']*)'"))
+                list.Add((m.Groups[1].Value, m.Groups[2].Value));
+        }
+        catch (Exception ex)
+        {
+            Log.Info("webcam list: " + ex.Message);
+        }
+        return list;
+    }
+
     /// <summary>Runs "emulator -accel-check" and reports whether hardware acceleration (WHPX/AEHD) is usable.</summary>
     public static async Task<(bool ok, string details)> CheckAccelerationAsync()
     {

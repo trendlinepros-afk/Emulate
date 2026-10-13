@@ -11,7 +11,8 @@ public class ConfigReceiver extends BroadcastReceiver {
         String token = intent.getStringExtra("token");
         int port = intent.getIntExtra("port", 47823);
         if (token == null || token.isEmpty()) return;
-        Bridge.prefs(context).edit().putString("token", token).putInt("port", port).apply();
+        String dev = intent.getStringExtra("dev");
+        Bridge.prefs(context).edit().putString("token", token).putInt("port", port).putString("dev", dev == null ? "" : dev).apply();
         setResultCode(1);
         setResultData("configured");
     }

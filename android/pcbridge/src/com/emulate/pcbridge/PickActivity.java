@@ -59,9 +59,10 @@ public class PickActivity extends Activity {
             mime = sb.toString();
         }
         if (mime == null) mime = "*/*";
-        final String query = "/pick?mime=" + Bridge.enc(mime) + "&multi=" + (in.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) ? "1" : "0");
+        final String query = "/pick?mime=" + Bridge.enc(mime) + "&multi=" + (in.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) ? "1" : "0")
+                + "&dev=" + Bridge.enc(Bridge.prefs(this).getString("dev", ""));
 
-        Toast.makeText(this, "Choose the file in the window that opened on your PC…", Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "Choose the file on your PC (or on your phone if you're using Web access)…", Toast.LENGTH_LONG).show();
 
         new Thread(() -> {
             try {

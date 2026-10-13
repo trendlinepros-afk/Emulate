@@ -32,6 +32,23 @@ public static class WebAccess
         lock (Servers) return Servers.ContainsKey(p.Id);
     }
 
+    /// <summary>True when a browser is currently viewing this profile's device.</summary>
+    public static bool HasViewers(string profileId)
+    {
+        lock (Servers) return Servers.TryGetValue(profileId, out var s) && s.HasViewers;
+    }
+
+    /// <summary>Asks the browser(s) viewing this device to choose files (camera roll, camera, files). Returns local paths.</summary>
+    public static Task<string[]> PickViaBrowserAsync(string profileId, string mime, bool multi)
+    {
+        WebAccessServer? s;
+        lock (Servers) Servers.TryGetValue(profileId, out s);
+        return s?.PickAsync(mime, multi) ?? Task.FromResult(Array.Empty<string>());
+    }
+
+    /// <summary>Folder for files uploaded from browsers (cleared on start).</summary>
+    public static string UploadDir => Path.Combine(Path.GetTempPath(), "Emulate-web");
+
     public static string EnsureCode(Profile p)
     {
         if (string.IsNullOrEmpty(p.WebCode))
@@ -154,11 +171,70 @@ internal sealed class WebAccessServer : IAsyncDisposable
 
     private Profile P => _dev.Profile;
 
+    private readonly List<StreamClient> _viewers = new();
+    private readonly Dictionary<string, (TaskCompletionSource<string[]> tcs, List<string> files)> _picks = new();
+
+    public bool HasViewers
+    {
+        get { lock (_viewers) return _viewers.Count > 0; }
+    }
+
+    private void BroadcastText(object message)
+    {
+        var json = JsonSerializer.Serialize(message);
+        lock (_viewers) foreach (var v in _viewers) _ = v.SendTextAsync(json);
+    }
+
+    /// <summary>A file request from the device (e.g. an app's "attach photo") answered from the viewer's phone.</summary>
+    public async Task<string[]> PickAsync(string mime, bool multi)
+    {
+        var id = Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<string[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_picks) _picks[id] = (tcs, new List<string>());
+        BroadcastText(new { type = "pick", req = id, mime, multi });
+        try
+        {
+            var done = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromMinutes(15)));
+            return done == tcs.Task ? tcs.Task.Result : Array.Empty<string>();
+        }
+        finally
+        {
+            lock (_picks) _picks.Remove(id);
+            BroadcastText(new { type = "pickclose", req = id });
+        }
+    }
+
+    private void FinishPick(string id, bool ok)
+    {
+        lock (_picks)
+        {
+            if (!_picks.TryGetValue(id, out var p)) return;
+            lock (p.files) p.tcs.TrySetResult(ok ? p.files.ToArray() : Array.Empty<string>());
+        }
+    }
+
+    /// <summary>Saves an uploaded request body (one file) into the upload folder.</summary>
+    private static async Task<string> SaveBodyAsync(HttpContext ctx)
+    {
+        var name = Path.GetFileName(ctx.Request.Query["name"].ToString());
+        foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
+        if (string.IsNullOrWhiteSpace(name)) name = $"photo-{DateTime.Now:yyyyMMdd-HHmmss}.jpg";
+        var dir = Path.Combine(WebAccess.UploadDir, Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, name);
+        await using (var fs = File.Create(path)) await ctx.Request.Body.CopyToAsync(fs, ctx.RequestAborted);
+        return path;
+    }
+
     public async Task StartAsync(int port)
     {
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        builder.WebHost.ConfigureKestrel(o => o.ListenAnyIP(port));
+        builder.WebHost.ConfigureKestrel(o =>
+        {
+            o.ListenAnyIP(port);
+            o.Limits.MaxRequestBodySize = null; // photos and videos from the phone can be large
+        });
         var app = builder.Build();
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
 
@@ -189,6 +265,35 @@ internal sealed class WebAccessServer : IAsyncDisposable
             ctx.Response.ContentType = "image/png";
             ctx.Response.Headers.CacheControl = "no-store";
             await ctx.Response.Body.WriteAsync(png);
+        });
+
+        // "Add photos" in the page: files from the phone go straight into the device's gallery.
+        app.MapPost("/add-to-device", async ctx =>
+        {
+            if (!Authorized(ctx, out _)) { ctx.Response.StatusCode = 403; return; }
+            var path = await SaveBodyAsync(ctx);
+            try
+            {
+                var n = await DeviceManager.SendFilesAsync(_dev, new[] { path }, "From phone");
+                await ctx.Response.WriteAsJsonAsync(new { ok = n == 1 });
+            }
+            finally
+            {
+                try { File.Delete(path); Directory.Delete(Path.GetDirectoryName(path)!); } catch { }
+            }
+        });
+
+        // Answer to a device file request: one POST per chosen file, then "pickdone" over the socket.
+        app.MapPost("/pick-upload", async ctx =>
+        {
+            if (!Authorized(ctx, out _)) { ctx.Response.StatusCode = 403; return; }
+            var req = ctx.Request.Query["req"].ToString();
+            List<string>? files;
+            lock (_picks) files = _picks.TryGetValue(req, out var p) ? p.files : null;
+            if (files == null) { ctx.Response.StatusCode = 404; return; }
+            var path = await SaveBodyAsync(ctx);
+            lock (files) files.Add(path);
+            await ctx.Response.WriteAsJsonAsync(new { ok = true });
         });
 
         app.Map("/ws", async ctx =>
@@ -222,6 +327,11 @@ internal sealed class WebAccessServer : IAsyncDisposable
     {
         var client = new StreamClient(ws);
         await client.SendTextAsync(JsonSerializer.Serialize(new { type = "info", name = P.Name, os = P.Os.Name }));
+        lock (_viewers) _viewers.Add(client);
+        // A file request may already be waiting (e.g. the page was reloaded).
+        lock (_picks)
+            foreach (var id in _picks.Keys)
+                _ = client.SendTextAsync(JsonSerializer.Serialize(new { type = "pick", req = id, mime = "*/*", multi = true }));
         if (wantVideo) _streamer.Add(client);
         var sender = client.PumpAsync(aborted);
         try
@@ -246,6 +356,7 @@ internal sealed class WebAccessServer : IAsyncDisposable
         }
         finally
         {
+            lock (_viewers) _viewers.Remove(client);
             _streamer.Remove(client);
             client.Complete();
             await sender;
@@ -257,6 +368,11 @@ internal sealed class WebAccessServer : IAsyncDisposable
         using var doc = JsonDocument.Parse(json);
         var m = doc.RootElement;
         var t = m.GetProperty("t").GetString();
+        if (t is "pickdone" or "pickcancel")
+        {
+            FinishPick(m.GetProperty("req").GetString() ?? "", t == "pickdone");
+            return;
+        }
         var fast = _streamer.Fast;
         // Fast path (scrcpy): coordinates are relative to the video frame, whose size the page reports.
         int VX(string k) => (int)Math.Round(Math.Clamp(m.GetProperty(k).GetDouble(), 0, 1) * m.GetProperty("w").GetInt32());

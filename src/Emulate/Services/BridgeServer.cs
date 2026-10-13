@@ -185,7 +185,11 @@ public static class BridgeServer
         string[] files;
         try
         {
-            files = await Application.Current.Dispatcher.InvokeAsync(() => ShowPicker(mime, multi)).Task;
+            // Someone is using this device from a browser: ask their phone instead of opening File Explorer on the PC.
+            var dev = req.Query.GetValueOrDefault("dev");
+            files = !string.IsNullOrEmpty(dev) && WebAccess.HasViewers(dev)
+                ? await WebAccess.PickViaBrowserAsync(dev, mime, multi)
+                : await Application.Current.Dispatcher.InvokeAsync(() => ShowPicker(mime, multi)).Task;
         }
         finally
         {
@@ -199,7 +203,7 @@ public static class BridgeServer
             var info = new FileInfo(f);
             return new { id, name = info.Name, size = info.Length, mime = Mime.FromPath(f) };
         }).ToArray();
-        if (result.Length > 0) Log.Say($"Sent {result.Length} file(s) from the PC to the device.");
+        if (result.Length > 0) Log.Say($"Sent {result.Length} file(s) to the device.");
         await SendJsonAsync(stream, result);
     }
 

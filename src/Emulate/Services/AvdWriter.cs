@@ -66,8 +66,8 @@ public static class AvdWriter
             ["hw.sensors.light"] = "yes",
             ["hw.audioInput"] = "yes",
             ["hw.audioOutput"] = "yes",
-            ["hw.camera.back"] = p.Camera == "none" ? "none" : p.Camera == "emulated" ? "virtualscene" : "webcam0",
-            ["hw.camera.front"] = p.Camera == "none" ? "none" : p.Camera == "emulated" ? "emulated" : "webcam0",
+            ["hw.camera.back"] = p.Camera == "none" ? "none" : p.Camera == "emulated" ? "virtualscene" : Webcam(p.Camera),
+            ["hw.camera.front"] = p.Camera == "none" ? "none" : p.Camera == "emulated" ? "emulated" : Webcam(p.Camera),
             ["hw.sdCard"] = "no",
             ["fastboot.forceColdBoot"] = "no",
             ["fastboot.forceFastBoot"] = "yes",
@@ -106,6 +106,9 @@ public static class AvdWriter
         p.BridgeVersion = null;
         ProfileStore.Save();
     }
+
+    private static string Webcam(string camera) =>
+        System.Text.RegularExpressions.Regex.IsMatch(camera, @"^webcam\d+$") ? camera : "webcam0";
 
     private static string Sanitize(string s) => new string(s.Where(c => c >= 32 && c < 127 && c != '=').ToArray());
 }

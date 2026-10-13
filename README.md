@@ -63,6 +63,11 @@ tap, swipe, scroll, type, and use Back, Home, Recent apps, volume, rotate and po
   If scrcpy can't start, Emulate falls back to Android's screen recorder and `adb input`, which is slower.
 - Live video needs a browser that supports WebCodecs H.264 (Chrome, Edge, Safari 16.4+, recent Firefox). Other
   browsers get "basic mode", which updates the screen a few times a second.
+- **Add photos** (picture button): on an iPhone choose *Photo Library*, *Take Photo* or *Choose File*. Everything lands
+  in the device's gallery (Pictures › From phone), so it shows up in apps like WhatsApp straight away.
+- When an app on the device asks for a file (e.g. *Pick from PC*, or the *Windows PC* location in the file picker)
+  while you're viewing it in a browser, the request appears **on your phone**: pick from your camera roll or take a
+  new photo, and it goes straight into the app.
 - **Fit to screen** (the corners button, on by default on phones and tablets) reshapes the Android display to
   your browser's shape so it fills the page. The device returns to its normal shape when the last browser
   disconnects.
@@ -75,7 +80,8 @@ tap, swipe, scroll, type, and use Back, Home, Recent apps, volume, rotate and po
 A profile is one device: its own apps, accounts, photos and settings. You can have as many as you want per OS,
 for example a "Work WhatsApp" and a "Personal" phone. For each one you choose:
 - device type (flagship, standard, compact phone or tablet), RAM and storage
-- camera (your PC webcam, a simulated camera, or none)
+- camera: any webcam on the PC, a simulated camera, or none. To use your phone's camera inside every app (including
+  WhatsApp's camera), install a free phone-as-webcam app such as Camo, Iriun or DroidCam and pick it here
 - location (live from Windows, approximate from your IP, a fixed spot, or off)
 
 Use the **⋯** menu on a profile to:

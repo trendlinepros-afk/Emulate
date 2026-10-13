@@ -38,6 +38,7 @@ public partial class App : Application
         }
 
         Log.Info($"Emulate {UpdateService.CurrentVersion} starting from {AppPaths.InstallDir}");
+        try { if (Directory.Exists(WebAccess.UploadDir)) Directory.Delete(WebAccess.UploadDir, true); } catch { }
         BridgeServer.Start();
 
         var main = new MainWindow();

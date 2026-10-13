@@ -56,6 +56,7 @@ public partial class ProfileWindow : Window
         };
         CameraList.ItemsSource = cams;
         CameraList.SelectedItem = cams.FirstOrDefault(c => c.Value == Profile.Camera) ?? cams[0];
+        _ = LoadWebcamsAsync(cams);
 
         SyncBox.IsChecked = Profile.SyncSharedFolder;
 
@@ -78,6 +79,18 @@ public partial class ProfileWindow : Window
             CurrentLocation.Text = fix != null ? "This PC's location right now: " + fix : "Could not determine this PC's location.";
             if (LocationService.LastWindowsError != null) CurrentLocation.Text += "\n" + LocationService.LastWindowsError;
         };
+    }
+
+    /// <summary>Replaces the generic "PC webcam" choice with the actual cameras on this PC (once the emulator is installed).</summary>
+    private async Task LoadWebcamsAsync(List<Choice<string>> baseChoices)
+    {
+        var webcams = await SdkInstaller.ListWebcamsAsync();
+        if (webcams.Count == 0) return;
+        var selected = (CameraList.SelectedItem as Choice<string>)?.Value ?? Profile.Camera;
+        var list = webcams.Select(w => new Choice<string>(w.name.Length > 0 ? w.name : w.id, w.id)).ToList();
+        list.AddRange(baseChoices.Where(c => !c.Value.StartsWith("webcam")));
+        CameraList.ItemsSource = list;
+        CameraList.SelectedItem = list.FirstOrDefault(c => c.Value == selected) ?? list[0];
     }
 
     private static string SuggestName(OsDefinition os)
